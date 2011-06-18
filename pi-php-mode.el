@@ -8,7 +8,7 @@
 ;; Author: Turadg Aleahmad, 1999-2004
 ;; Keywords: php languages oop
 ;; Created: 1999-05-17
-;; $Last Modified on Thu Jun 16 22:55:41 2011
+;; $Last Modified on 2011/06/17
 ;; X-URL Original version http://php-mode.sourceforge.net/
 ;; X-URL This fork http://git.piprime.fr/?p=emacs/pi-php-mode.git;a=summary
 
@@ -53,10 +53,10 @@
 
 ;;; Commentary:
 
-;; PHP mode is a major mode for editing PHP 3 and 4 source code.  It's
+;; PHP mode is a major mode for editing PHP source code. It's
 ;; an extension of C mode; thus it inherits all C mode's navigation
 ;; functionality.  But it colors according to the PHP grammar and indents
-;; according to the PEAR coding guidelines.  It also includes a couple
+;; according to the PEAR coding guidelines. It also includes a couple
 ;; handy IDE-type features such as documentation search and a source
 ;; and class browser.
 
@@ -73,12 +73,14 @@
 
 ;;; Changelog:
 
-;; 1.6
+;; 2.0
 ;; Philippe Ivaldi
-;; Because of development of php-mode is dead, I forked it and rename if pi-php-mode.el
-;; Add Handling of name spaces and # as comment char
-;; Add support for heredoc
-;; Add font-coloring for all the official php functions
+;; Because of development of php-mode is dead, I forked it and rename it pi-php-mode.el
+;; Add Handling name spaces highlighting and # as comment char
+;; Add support for heredoc indentation and highlighting
+;; Add font-coloring for all the official php functions and new keywords in PHP 5.3
+;; Optimize some piece of code
+;; Fix indentation and set PEAR coding style the default
 
 ;; 1.5
 ;;   Support function keywords like public, private and the ampersand
@@ -193,7 +195,7 @@ You can replace \"en\" with your ISO language code."
   :type 'string
   :group 'php)
 
-(defcustom php-manual-path ""
+(defcustom php-manual-path "/usr/share/doc/php-doc/html/"
   "Path to the directory which contains the PHP manual."
   :type 'string
   :group 'php)
@@ -227,14 +229,11 @@ Turning this on (the default) will force PEAR rules on all PHP files."
   :type 'boolean
   :group 'php)
 
-(defconst pi-php-mode-modified "2011-05-30"
-  "PHP Mode build date.")
-
 (defun pi-php-mode-version ()
   "Display string describing the version of PHP mode."
   (interactive)
-  (message "PHP mode %s of %s"
-           pi-php-mode-version-number pi-php-mode-modified))
+  (message "pi-php-mode %s"
+           pi-php-mode-version-number))
 
 (defconst php-beginning-of-defun-regexp
   "^\\s-*\\(?:\\(?:abstract\\|final\\|private\\|protected\\|public\\|static\\)\\s-+\\)*function\\s-+&?\\(\\(?:\\sw\\|\\s_\\)+\\)\\s-*("
@@ -641,7 +640,7 @@ current `tags-file-name'."
              (cond ((and (not (string= "" php-completion-file))
                          (file-readable-p php-completion-file))
                     (php-build-table-from-file php-completion-file))
-                   (php-manual-path
+                   ((file-directory-p php-manual-path)
                     (php-build-table-from-path php-manual-path))
                    (t nil))))
         (unless (or php-table tags-table)
@@ -1298,8 +1297,8 @@ The elements of LIST are not copied, just the list structure itself."
     '("\"[[:space:]]+\\([a-z:]+=\\)" (1 font-lock-constant-face))
 
     ;; warn about '$' immediately after ->
-    '("\\$\\sw+->\\s-*\\(\\$\\)\\(\\sw+\\)"
-      (1 font-lock-warning-face) (2 php-default-face))
+    ;; '("\\$\\sw+->\\s-*\\(\\$\\)\\sw+"
+    ;;   (1 font-lock-warning-face) (2 php-default-face))
 
     ;; warn about $word.word -- it could be a valid concatenation,
     ;; but without any spaces we'll assume $word->word was meant.
