@@ -196,7 +196,7 @@ You can replace \"en\" with your ISO language code."
 
 (defcustom php-completion-file
   (concat
-   (file-name-directory load-file-name)
+   (file-name-directory (or load-file-name buffer-file-name))
    "php-completion-file.txt")
   "Path to the file which contains the function names known to PHP."
   :type 'string
@@ -267,7 +267,7 @@ have any tags inside a PHP string, it will be fooled."
 (defun php-mode-version ()
   "Display string describing the version of PHP mode."
   (interactive)
-  (message "php-mode %s"
+  (message "PHP mode version is %s"
            php-mode-version-number))
 
 (defconst php-beginning-of-defun-regexp
@@ -1596,6 +1596,7 @@ The elements of LIST are not copied, just the list structure itself."
     )
   )
 
-(provide 'pi-php-mode)
-
-;;; php-mode.el ends here
+(provide (intern
+          (file-name-sans-extension
+           (file-name-nondirectory (or load-file-name buffer-file-name)))))
+;;; pi-php-mode.el ends here
