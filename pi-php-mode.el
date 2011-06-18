@@ -317,23 +317,77 @@ See `php-beginning-of-defun'."
 
 
 (defvar php-warned-bad-indent nil)
-(make-variable-buffer-local 'php-warned-bad-indent)
 
-;; Do it but tell it is not good if html tags in buffer.
 (defun php-check-html-for-indentation ()
   (let ((html-tag-re "^\\s-*</?\\sw+.*?>")
         (here (point)))
-    (if (not (or (re-search-forward html-tag-re (line-end-position) t)
-                 (re-search-backward html-tag-re (line-beginning-position) t)))
-        t
+    (goto-char (line-beginning-position))
+    (if (or (when (boundp 'mumamo-multi-major-mode) mumamo-multi-major-mode)
+            ;; Fix-me: no idea how to check for mmm or multi-mode
+            (save-match-data
+              (not (or (re-search-forward html-tag-re (line-end-position) t)
+                       (re-search-backward html-tag-re (line-beginning-position) t)))))
+        (progn
+          (goto-char here)
+          t)
       (goto-char here)
       (setq php-warned-bad-indent t)
-      (lwarn 'php-indent :warning
-             "\n\t%s\n\t%s\n\t%s\n"
-             "Indentation fails badly with mixed HTML and PHP."
-             "Look for an Emacs Lisp library that supports \"multiple"
-             "major modes\" like mumamo, mmm-mode or multi-mode.")
-      nil)))
+
+      (let* ((known-multi-libs '(("mumamo" mumamo (lambda () (nxhtml-mumamo)))
+                                 ("mmm-mode" mmm-mode (lambda () (mmm-mode 1)))
+                                 ("multi-mode" multi-mode (lambda () (multi-mode 1)))))
+             (known-names (mapcar (lambda (lib) (car lib)) known-multi-libs))
+             (available-multi-libs (delq nil
+                                         (mapcar
+                                          (lambda (lib)
+                                            (when (locate-library (car lib)) lib))
+                                          known-multi-libs)))
+             (available-names (mapcar (lambda (lib) (car lib)) available-multi-libs))
+             (base-msg
+              (concat
+               "Indentation fails badly with mixed HTML/PHP in the HTML part in
+plaín `php-mode'.  To get indentation to work you must use an
+Emacs library that supports 'multiple major modes' in a buffer.
+Parts of the buffer will then be in `php-mode' and parts in for
+example `html-mode'.  Known such libraries are:\n\t"
+               (mapconcat 'identity known-names ", ")
+               "\n"
+               (if available-multi-libs
+                   (concat
+                    "You have these available in your `load-path':\n\t"
+                    (mapconcat 'identity available-names ", ")
+                    "\n\n"
+                    "Do you want to turn any of those on? ")
+                 "You do not have any of those in your `load-path'.")))
+             (is-using-multi
+              (catch 'is-using
+                (dolist (lib available-multi-libs)
+                  (when (and (boundp (cadr lib))
+                             (symbol-value (cadr lib)))
+                    (throw 'is-using t))))))
+        (unless is-using-multi
+          (if available-multi-libs
+              (if (not (y-or-n-p base-msg))
+                  (message "Did not do indentation, but you can try again now if you want")
+                (let* ((name
+                        (if (= 1 (length available-multi-libs))
+                            (car available-names)
+                          ;; Minibuffer window is more than one line, fix that first:
+                          (message "")
+                          (completing-read "Choose multiple major mode support library: "
+                                           available-names nil t
+                                           (car available-names)
+                                           '(available-names . 1)
+                                           )))
+                       (mode (when name
+                               (caddr (assoc name available-multi-libs)))))
+                  (when mode
+                    ;; Minibuffer window is more than one line, fix that first:
+                    (message "")
+                    (load name)
+                    (funcall mode))))
+            (lwarn 'php-indent :warning base-msg)))
+        nil))))
 
 (defun php-cautious-indent-region (start end &optional quiet)
   (if (or (not php-warn-if-mumamo-off)
@@ -367,6 +421,40 @@ See `php-beginning-of-defun'."
    (c-lang-const c-symbol-key c)                ;; Class name.
    "\\(\\s-+extends\\s-+" (c-lang-const c-symbol-key c) "\\)?" ;; Name of superclass.
    "\\(\\s-+implements\\s-+[^{]+{\\)?")) ;; List of any adopted protocols.
+
+(defun php-c-at-vsemi-p (&optional pos)
+  "Return t on html lines (including php region border), otherwise nil.
+POS is a position on the line in question.
+
+This is was done due to the problem reported here:
+
+  URL `https://answers.launchpad.net/nxhtml/+question/43320'"
+  (setq pos (or pos (point)))
+  (let ((here (point))
+        ret)
+    (save-match-data
+      (goto-char pos)
+      (beginning-of-line)
+      (setq ret (looking-at
+                 (rx
+                  (or (seq
+                       bol
+                       (0+ space)
+                       "<"
+                       (in "a-z\\?"))
+                      (seq
+                       ;;(0+ anything)
+                       (0+ not-newline)
+                       (in "a-z\\?")
+                       ">"
+                       (0+ space)
+                       eol))))))
+    (goto-char here)
+    ret))
+
+(defun php-c-vsemi-status-unknown-p ()
+  "See `php-c-at-vsemi-p'.")
+
 
 ;;;###autoload
 (define-derived-mode pi-php-mode c-mode "PHP"
@@ -606,6 +694,8 @@ The document is bounded by `php-here-document-word'."
   (setq indent-line-function 'php-cautious-indent-line)
   (setq indent-region-function 'php-cautious-indent-region)
   (setq c-special-indent-hook nil)
+  (setq c-at-vsemi-p-fn 'php-c-at-vsemi-p)
+  (setq c-vsemi-status-unknown-p 'php-c-vsemi-status-unknown-p)
 
   (set (make-local-variable 'beginning-of-defun-function)
        'php-beginning-of-defun)
@@ -655,23 +745,24 @@ for \\[find-tag] (which see)."
         completion
         (php-functions (php-completion-table)))
     (if (not pattern) (message "Nothing to complete")
-      (search-backward pattern)
-      (setq beg (point))
-      (forward-char (length pattern))
-      (setq completion (try-completion pattern php-functions nil))
-      (cond ((eq completion t))
-            ((null completion)
-             (message "Can't find completion for \"%s\"" pattern)
-             (ding))
-            ((not (string= pattern completion))
-             (delete-region beg (point))
-             (insert completion))
-            (t
-             (message "Making completion list...")
-             (with-output-to-temp-buffer "*Completions*"
-               (display-completion-list
-                (all-completions pattern php-functions)))
-             (message "Making completion list...%s" "done"))))))
+      (if (not (search-backward pattern nil t))
+          (message "Can't complete here")
+        (setq beg (point))
+        (forward-char (length pattern))
+        (setq completion (try-completion pattern php-functions nil))
+        (cond ((eq completion t))
+              ((null completion)
+               (message "Can't find completion for \"%s\"" pattern)
+               (ding))
+              ((not (string= pattern completion))
+               (delete-region beg (point))
+               (insert completion))
+              (t
+               (message "Making completion list...")
+               (with-output-to-temp-buffer "*Completions*"
+                 (display-completion-list
+                  (all-completions pattern php-functions)))
+               (message "Making completion list...%s" "done")))))))
 
 (defun php-completion-table ()
   "Build variable `php-completion-table' on demand.
@@ -1349,7 +1440,7 @@ The elements of LIST are not copied, just the list structure itself."
      ;; warn about '$' immediately after ->
      ,@(when php-mode-dollar-property-warning
          '(("\\$\\sw+->\\s-*\\(\\$\\)\\(\\sw+\\)"
-          (1 font-lock-warning-face) (2 php-default-face))))
+            (1 font-lock-warning-face) (2 php-default-face))))
 
      ;; warn about $word.word -- it could be a valid concatenation,
      ;; but without any spaces we'll assume $word->word was meant.
@@ -1381,7 +1472,7 @@ The elements of LIST are not copied, just the list structure itself."
 
      ;; Warn on any words not already fontified
      ("\\<\\sw+\\>" . ',(if php-mode-warn-on-unmatched
-                           font-lock-warning-face php-default-face))
+                            font-lock-warning-face php-default-face))
      ))
   "Gauchy level highlighting for PHP mode.")
 
