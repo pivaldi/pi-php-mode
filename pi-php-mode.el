@@ -8,7 +8,7 @@
 ;; Author: Turadg Aleahmad, 1999-2004
 ;; Keywords: php languages oop
 ;; Created: 1999-05-17
-;; $Last Modified on 2011/06/17
+;; $Last Modified on 2011/06/18
 ;; X-URL Original version http://php-mode.sourceforge.net/
 ;; X-URL This fork http://git.piprime.fr/?p=emacs/pi-php-mode.git;a=summary
 
@@ -43,7 +43,7 @@
 ;;   (add-hook 'pi-php-mode-hook
 ;;     '(lambda () (define-abbrev pi-php-mode-abbrev-table "ex" "extends")))
 
-;; To make pi-php-mode compatible with html-mode, see http://pi-php-mode.sf.net
+;; To make pi-php-mode compatible with html-mode, see http://php-mode.sf.net
 
 ;; Many options available under Help:Customize
 ;; Options specific to pi-php-mode are in
@@ -73,8 +73,27 @@
 
 ;;; Changelog:
 
+;; 2.1
+;; Added from http://www.emacswiki.org/emacs/php-mode-improved.el
+;; New customisation options for some of the syntax highlighting
+;; features. I personally use the 'Gauchy' level of syntax
+;; highlighting -- I want variables and function calls fontified --
+;; but there were several very annoying "features" in this level of
+;; syntax highlighting, particularly the ones that warn you about
+;; perfectly valid code. I've added:
+;;
+;; * `php-mode-dollar-property-warning', which, if non-nil, warns on
+;;   $foo->$bar. (Default is nil.)
+;; * `php-mode-dot-property-warning', which, if non-nil, warns on
+;;   $foo.bar. (Default is nil.)
+;; * `php-mode-warn-on-unmatches', which, if non-nil, warns on
+;;   "everything else". (Default is nil.)
+;; * `php-mode-warn-if-mumamo-off', which, if nil, suppresses the
+;;   once-per-file warning about indenting with mumamo-mode turned
+;;   off. (Default is t)
+
 ;; 2.0
-;; Philippe Ivaldi
+;; Philippe Ivaldi (starting fork)
 ;; Because of development of php-mode is dead, I forked it and rename it pi-php-mode.el
 ;; Add Handling name spaces highlighting and # as comment char
 ;; Add support for heredoc indentation and highlighting
@@ -229,6 +248,34 @@ Turning this on (the default) will force PEAR rules on all PHP files."
   :type 'boolean
   :group 'php)
 
+(defcustom php-mode-dollar-property-warning nil
+  "If non-`nil', warn about expressions like $foo->$bar where you
+might have meant $foo->bar. Defaults to `nil' since this is valid
+code."
+  :type 'boolean
+  :group 'php)
+
+(defcustom php-mode-dot-property-warning nil
+  "If non-`nil', wan about expressions like $foo.bar, which could
+be a valid concatenation (if bar were a constant, or interpreted
+as an unquoted string), but it's more likely you meant $foo->bar."
+  :type 'boolean
+  :group 'php)
+
+(defcustom php-mode-warn-on-unmatched nil
+  "If non-`nil', use `font-lock-warning-face' on any expression
+that isn't matched by the other font lock regular expressions."
+  :type 'boolean
+  :group 'php)
+
+(defcustom php-warn-if-mumamo-off t
+  "Warn once per buffer if you try to indent a buffer without
+mumamo-mode turned on. Detects if there are any HTML tags in the
+buffer before warning, but this is not very smart; e.g. if you
+have any tags inside a PHP string, it will be fooled."
+  :type '(choice (const :tag "Warn" t) (const "Don't warn" nil))
+  :group 'php)
+
 (defun pi-php-mode-version ()
   "Display string describing the version of PHP mode."
   (interactive)
@@ -268,6 +315,7 @@ See `php-beginning-of-defun'."
   (php-beginning-of-defun (- (or arg 1))))
 
 
+
 (defvar php-warned-bad-indent nil)
 (make-variable-buffer-local 'php-warned-bad-indent)
 
@@ -288,12 +336,14 @@ See `php-beginning-of-defun'."
       nil)))
 
 (defun php-cautious-indent-region (start end &optional quiet)
-  (if (or php-warned-bad-indent
+  (if (or (not php-warn-if-mumamo-off)
+          php-warned-bad-indent
           (php-check-html-for-indentation))
       (funcall 'c-indent-region start end quiet)))
 
 (defun php-cautious-indent-line ()
-  (if (or php-warned-bad-indent
+  (if (or (not php-warn-if-mumamo-off)
+          php-warned-bad-indent
           (php-check-html-for-indentation))
       (funcall 'c-indent-line)))
 
@@ -455,8 +505,8 @@ If non-nil INDENTED indicates that the EOF was indented."
       ;; found a close-heredoc which makes the current close-heredoc inoperant.
       (cond
        ((and start (match-end 1)
-                   (not (and indented (= (match-beginning 1) (match-end 1))))
-                   (not (php-in-comment-or-string (match-beginning 0))))
+             (not (and indented (= (match-beginning 1) (match-end 1))))
+             (not (php-in-comment-or-string (match-beginning 0))))
         php-here-doc-syntax)
        ((not (or start (save-excursion (re-search-forward sre nil t))))
         ;; There's no <<<EOF either before or after us,
@@ -1288,50 +1338,51 @@ The elements of LIST are not copied, just the list structure itself."
 (defconst php-font-lock-keywords-3
   (append
    php-font-lock-keywords-2
-   (list
-    ;; HTML >
-    '("<[^>]*\\(>\\)" (1 font-lock-constant-face))
+   `(
+     ;; HTML >
+     ("<[^>]*\\(>\\)" (1 font-lock-constant-face))
 
-    ;; HTML tags
-    '("\\(<[^<][a-z]*?\\)[[:space:]]+\\([a-z:]+=\\)[^>]*?" (1 font-lock-constant-face) (2 font-lock-constant-face) )
-    '("\"[[:space:]]+\\([a-z:]+=\\)" (1 font-lock-constant-face))
+     ;; HTML tags
+     ("\\(<[^<][a-z]*?\\)[[:space:]]+\\([a-z:]+=\\)[^>]*?" (1 font-lock-constant-face) (2 font-lock-constant-face) )
+     ("\"[[:space:]]+\\([a-z:]+=\\)" (1 font-lock-constant-face))
 
-    ;; warn about '$' immediately after ->
-    ;; '("\\$\\sw+->\\s-*\\(\\$\\)\\sw+"
-    ;;   (1 font-lock-warning-face) (2 php-default-face))
+     ;; warn about '$' immediately after ->
+     ,@(when php-mode-dollar-property-warning
+         '(("\\$\\sw+->\\s-*\\(\\$\\)\\(\\sw+\\)"
+          (1 font-lock-warning-face) (2 php-default-face))))
 
-    ;; warn about $word.word -- it could be a valid concatenation,
-    ;; but without any spaces we'll assume $word->word was meant.
-    '("\\$\\sw+\\(\\.\\)\\sw"
-      1 font-lock-warning-face)
+     ;; warn about $word.word -- it could be a valid concatenation,
+     ;; but without any spaces we'll assume $word->word was meant.
+     ,@(when php-mode-dot-property-warning
+         '(("\\$\\sw+\\(\\.\\)\\sw" 1 font-lock-warning-face)))
 
-    ;; Warn about ==> instead of =>
-    '("==+>" . font-lock-warning-face)
+     ;; Warn about ==> instead of =>
+     ("==+>" . font-lock-warning-face)
 
-    ;; exclude casts from bare-word treatment (may contain spaces)
-    `(,(concat "(\\s-*\\(" php-types "\\)\\s-*)")
+     ;; exclude casts from bare-word treatment (may contain spaces)
+     (,(concat "(\\s-*\\(" php-types "\\)\\s-*)")
       1 font-lock-type-face)
 
-    ;; PHP5: function declarations may contain classes as parameters type
-    `(,(concat "[(,]\\s-*\\(\\(\\sw\\|\\\\\\)+\\)\\s-+&?\\$\\sw+\\>")
+     ;; PHP5: function declarations may contain classes as parameters type
+     (,(concat "[(,]\\s-*\\(\\(\\sw\\|\\\\\\)+\\)\\s-+&?\\$\\sw+\\>")
       1 font-lock-type-face)
 
-    ;; Fontify variables and function calls
-    '("\\$\\(this\\|that\\)\\W" (1 font-lock-constant-face nil nil))
-    `(,(concat "\\$\\(" php-superglobals "\\)\\W")
+     ;; Fontify variables and function calls
+     ("\\$\\(this\\|that\\)\\W" (1 font-lock-constant-face nil nil))
+     (,(concat "\\$\\(" php-superglobals "\\)\\W")
       (1 font-lock-constant-face nil nil)) ;; $_GET & co
-    '("\\$\\(\\sw+\\)" (1 font-lock-variable-name-face)) ;; $variable
-    '("->\\(\\sw+\\)" (1 font-lock-variable-name-face keep t)) ;; ->variable
-    '("->\\(\\sw+\\)\\s-*(" . (1 php-default-face keep t)) ;; ->function_call
-    '("\\(\\(\\sw\\|\\\\\\)+\\)::\\sw+\\s-*(?" . (1 font-lock-type-face)) ;; class::member
-    '("::\\(\\sw+\\>[^(]\\)" . (1 php-default-face)) ;; class::constant
-    '("\\<\\sw+\\s-*[[(]" . php-default-face) ;; word( or word[
-    '("\\<[0-9]+" . php-default-face) ;; number (also matches word)
+     ("\\$\\(\\sw+\\)" (1 font-lock-variable-name-face)) ;; $variable
+     ("->\\(\\sw+\\)" (1 font-lock-variable-name-face keep t)) ;; ->variable
+     ("->\\(\\sw+\\)\\s-*(" . (1 php-default-face keep t)) ;; ->function_call
+     ("\\(\\(\\sw\\|\\\\\\)+\\)::\\sw+\\s-*(?" . (1 font-lock-type-face)) ;; class::member
+     ("::\\(\\sw+\\>[^(]\\)" . (1 php-default-face)) ;; class::constant
+     ("\\<\\sw+\\s-*[[(]" . php-default-face) ;; word( or word[
+     ("\\<[0-9]+" . php-default-face) ;; number (also matches word)
 
-    ;; Warn on any words not already fontified
-    '("\\<\\sw+\\>" . font-lock-warning-face)
-
-    ))
+     ;; Warn on any words not already fontified
+     ("\\<\\sw+\\>" . ',(if php-mode-warn-on-unmatched
+                           font-lock-warning-face php-default-face))
+     ))
   "Gauchy level highlighting for PHP mode.")
 
 (provide 'pi-php-mode)
