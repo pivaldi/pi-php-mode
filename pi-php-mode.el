@@ -1,4 +1,4 @@
-;;; pi-php-mode.el --- major mode for editing PHP code
+;;; php-mode.el --- major mode for editing PHP code
 
 ;; Copyright (C) 1999, 2000, 2001, 2003, 2004 Turadg Aleahmad
 ;;               2008 Aaron S. Hawley
@@ -10,9 +10,9 @@
 ;; Created: 1999-05-17
 ;; $Last Modified on 2011/06/18
 ;; X-URL Original version http://php-mode.sourceforge.net/
-;; X-URL This fork http://git.piprime.fr/?p=emacs/pi-php-mode.git;a=summary
+;; X-URL This fork http://git.piprime.fr/?p=emacs/php-mode.git;a=summary
 
-(defconst pi-php-mode-version-number "2.0"
+(defconst php-mode-version-number "pi-php-mode 2.0"
   "PHP Mode version number.")
 
 ;;; License
@@ -37,16 +37,16 @@
 ;; Put this file in your Emacs lisp path (eg. site-lisp) and add to
 ;; your .emacs file:
 ;;
-;;   (require 'pi-php-mode)
+;;   (require 'php-mode)
 
 ;; To use abbrev-mode, add lines like this:
-;;   (add-hook 'pi-php-mode-hook
-;;     '(lambda () (define-abbrev pi-php-mode-abbrev-table "ex" "extends")))
+;;   (add-hook 'php-mode-hook
+;;     '(lambda () (define-abbrev php-mode-abbrev-table "ex" "extends")))
 
-;; To make pi-php-mode compatible with html-mode, see http://php-mode.sf.net
+;; To make php-mode compatible with html-mode, see http://php-mode.sf.net
 
 ;; Many options available under Help:Customize
-;; Options specific to pi-php-mode are in
+;; Options specific to php-mode are in
 ;;  Programming/Languages/Php
 ;; Since it inherits much functionality from c-mode, look there too
 ;;  Programming/Languages/C
@@ -94,7 +94,7 @@
 
 ;; 2.0
 ;; Philippe Ivaldi (starting fork)
-;; Because of development of php-mode is dead, I forked it and rename it pi-php-mode.el
+;; Because of development of php-mode is dead, I forked it and rename it php-mode.el
 ;; Add Handling name spaces highlighting and # as comment char
 ;; Add support for heredoc indentation and highlighting
 ;; Add font-coloring for all the official php functions and new keywords in PHP 5.3
@@ -106,7 +106,7 @@
 ;;   character for function-based commands.  Support abstract, final,
 ;;   static, public, private and protected keywords in Imenu.  Fix
 ;;   reversed order of Imenu entries.  Use font-lock-preprocessor-face
-;;   for PHP and ASP tags.  Make pi-php-mode-modified a literal value
+;;   for PHP and ASP tags.  Make php-mode-modified a literal value
 ;;   rather than a computed string.  Add date and time constants of
 ;;   PHP. (Dias Badekas) Fix false syntax highlighting of keywords
 ;;   because of underscore character.  Change HTML indentation warning
@@ -117,7 +117,7 @@
 ;;
 ;; 1.4
 ;;   Updated GNU GPL to version 3.  Ported to Emacs 22 (CC mode
-;;   5.31). M-x pi-php-mode-version shows version.  Provide end-of-defun
+;;   5.31). M-x php-mode-version shows version.  Provide end-of-defun
 ;;   beginning-of-defun functionality. Support add-log library.
 ;;   Fix __CLASS__ constant (Ian Eure).  Allow imenu to see visibility
 ;;   declarations -- "private", "public", "protected". (Bill Lovett)
@@ -132,23 +132,27 @@
 
 ;;; Code:
 
+(eval-when-compile
+  (require 'cl)
+  (require 'regexp-opt))
+
 (require 'speedbar)
 (require 'font-lock)
 (require 'cc-mode)
 (require 'cc-langs)
 (require 'custom)
 (require 'etags)
-(eval-when-compile
-  (require 'regexp-opt))
+(require 'imenu)
+(require 'thingatpt)
 
 ;; Local variables
 (defgroup php nil
-  "Major mode `pi-php-mode' for editing PHP code."
+  "Major mode `php-mode' for editing PHP code."
   :prefix "php-"
   :group 'languages)
 
 (defcustom php-default-face 'default
-  "Default face in `pi-php-mode' buffers."
+  "Default face in `php-mode' buffers."
   :type 'face
   :group 'php)
 
@@ -169,31 +173,15 @@ This can slow buffer loading."
   :type 'boolean
   :group 'php)
 
-(defcustom pi-php-mode-speedbar-open nil
-  "Normally `pi-php-mode' starts with the speedbar closed.
-Turning this on will open it whenever `pi-php-mode' is loaded."
+(defcustom php-mode-speedbar-open nil
+  "Normally `php-mode' starts with the speedbar closed.
+Turning this on will open it whenever `php-mode' is loaded."
   :type 'boolean
   :set (lambda (sym val)
          (set-default sym val)
          (when val
            (speedbar 1)))
   :group 'php)
-
-(defvar php-imenu-generic-expression
-  '(
-    ("Private Methods"
-     "^\\s-*\\(?:\\(?:abstract\\|final\\)\\s-+\\)?private\\s-+\\(?:static\\s-+\\)?function\\s-+\\(\\(?:\\sw\\|\\s_\\)+\\)\\s-*(" 1)
-    ("Protected Methods"
-     "^\\s-*\\(?:\\(?:abstract\\|final\\)\\s-+\\)?protected\\s-+\\(?:static\\s-+\\)?function\\s-+\\(\\(?:\\sw\\|\\s_\\)+\\)\\s-*(" 1)
-    ("Public Methods"
-     "^\\s-*\\(?:\\(?:abstract\\|final\\)\\s-+\\)?public\\s-+\\(?:static\\s-+\\)?function\\s-+\\(\\(?:\\sw\\|\\s_\\)+\\)\\s-*(" 1)
-    ("Classes"
-     "^\\s-*class\\s-+\\(\\(?:\\sw\\|\\s_\\)+\\)\\s-*" 1)
-    ("All Functions"
-     "^\\s-*\\(?:\\(?:abstract\\|final\\|private\\|protected\\|public\\|static\\)\\s-+\\)*function\\s-+\\(\\(?:\\sw\\|\\s_\\)+\\)\\s-*(" 1)
-    )
-  "Imenu generic expression for PHP Mode.  See `imenu-generic-expression'."
-  )
 
 (defcustom php-manual-url "http://www.php.net/manual/en/"
   "URL at which to find PHP manual.
@@ -221,28 +209,28 @@ You can replace \"en\" with your ISO language code."
 
 ;;;###autoload
 (defcustom php-file-patterns '("\\.php[s0-9]?\\'" "\\.phtml\\'" "\\.inc\\'" "\\.ctp\\'")
-  "List of file patterns for which to automatically invoke `pi-php-mode'."
+  "List of file patterns for which to automatically invoke `php-mode'."
   :type '(repeat (regexp :tag "Pattern"))
   :set (lambda (sym val)
          (set-default sym val)
          (let ((php-file-patterns-temp val))
            (while php-file-patterns-temp
              (add-to-list 'auto-mode-alist
-                          (cons (car php-file-patterns-temp) 'pi-php-mode))
+                          (cons (car php-file-patterns-temp) 'php-mode))
              (setq php-file-patterns-temp (cdr php-file-patterns-temp)))))
   :group 'php)
 
-(defcustom pi-php-mode-hook nil
-  "List of functions to be executed on entry to `pi-php-mode'."
+(defcustom php-mode-hook nil
+  "List of functions to be executed on entry to `php-mode'."
   :type 'hook
   :group 'php)
 
-(defcustom pi-php-mode-pear-hook nil
-  "Hook called when a PHP PEAR file is opened with `pi-php-mode'."
+(defcustom php-mode-pear-hook nil
+  "Hook called when a PHP PEAR file is opened with `php-mode'."
   :type 'hook
   :group 'php)
 
-(defcustom pi-php-mode-force-pear t
+(defcustom php-mode-force-pear t
   "PEAR coding rules are enforced when the filename contains \"PEAR.\"
 Turning this on (the default) will force PEAR rules on all PHP files."
   :type 'boolean
@@ -276,11 +264,11 @@ have any tags inside a PHP string, it will be fooled."
   :type '(choice (const :tag "Warn" t) (const "Don't warn" nil))
   :group 'php)
 
-(defun pi-php-mode-version ()
+(defun php-mode-version ()
   "Display string describing the version of PHP mode."
   (interactive)
-  (message "pi-php-mode %s"
-           pi-php-mode-version-number))
+  (message "php-mode %s"
+           php-mode-version-number))
 
 (defconst php-beginning-of-defun-regexp
   "^\\s-*\\(?:\\(?:abstract\\|final\\|private\\|protected\\|public\\|static\\)\\s-+\\)*function\\s-+&?\\(\\(?:\\sw\\|\\s_\\)+\\)\\s-*("
@@ -457,9 +445,9 @@ This is was done due to the problem reported here:
 
 
 ;;;###autoload
-(define-derived-mode pi-php-mode c-mode "PHP"
-  "Major mode for editing PHP code.\n\n\\{pi-php-mode-map}"
-  (c-add-language 'pi-php-mode 'c-mode)
+(define-derived-mode php-mode c-mode "PHP"
+  "Major mode for editing PHP code.\n\n\\{php-mode-map}"
+  (c-add-language 'php-mode 'c-mode)
 
   ;; PHP doesn't have C-style macros.
   ;; HACK: Overwrite this syntax with rules to match <?php and others.
@@ -482,7 +470,7 @@ This is was done due to the problem reported here:
 
   ;; Specify that cc-mode recognize Javadoc comment style
   (set (make-local-variable 'c-doc-comment-style)
-       '((pi-php-mode . javadoc)))
+       '((php-mode . javadoc)))
 
   ;;   (c-lang-defconst c-class-decl-kwds
   ;;     php php-class-decl-kwds)
@@ -660,8 +648,7 @@ The document is bounded by `php-here-document-word'."
   ;;(setq c-electric-flag nil)
 
   (setq font-lock-maximum-decoration t
-        case-fold-search t              ; PHP vars are case-sensitive
-        imenu-generic-expression php-imenu-generic-expression)
+        case-fold-search t)
 
   ;; Do not force newline at end of file.  Such newlines can cause
   ;; trouble if the PHP file is included in another file before calls
@@ -670,7 +657,7 @@ The document is bounded by `php-here-document-word'."
   (set (make-local-variable 'next-line-add-newlines) nil)
 
   ;; PEAR coding standards
-  (add-hook 'pi-php-mode-pear-hook
+  (add-hook 'php-mode-pear-hook
             (lambda ()
               (set (make-local-variable 'tab-width) 4)
               (set (make-local-variable 'c-basic-offset) 4)
@@ -684,12 +671,12 @@ The document is bounded by `php-here-document-word'."
               (c-set-offset 'arglist-cont-nonempty '4)
               (c-set-offset 'arglist-intro 'c-basic-offset)) nil t)
 
-  (if (or pi-php-mode-force-pear
+  (if (or php-mode-force-pear
           (and (stringp buffer-file-name)
                (string-match "PEAR\\|pear"
                              (buffer-file-name))
                (string-match "\\.php$" (buffer-file-name))))
-      (run-hooks 'pi-php-mode-pear-hook))
+      (run-hooks 'php-mode-pear-hook))
 
   (setq indent-line-function 'php-cautious-indent-line)
   (setq indent-region-function 'php-cautious-indent-region)
@@ -708,24 +695,24 @@ The document is bounded by `php-here-document-word'."
   (set (make-local-variable 'add-log-current-defun-header-regexp)
        php-beginning-of-defun-regexp)
 
-  (run-hooks 'pi-php-mode-hook))
+  (run-hooks 'php-mode-hook))
 
-(modify-syntax-entry ?# "< b" pi-php-mode-syntax-table)
+(modify-syntax-entry ?# "< b" php-mode-syntax-table)
 
 
 ;; Make a menu keymap (with a prompt string)
 ;; and make it the menu bar item's definition.
-(define-key pi-php-mode-map [menu-bar] (make-sparse-keymap))
-(define-key pi-php-mode-map [menu-bar php]
+(define-key php-mode-map [menu-bar] (make-sparse-keymap))
+(define-key php-mode-map [menu-bar php]
   (cons "PHP" (make-sparse-keymap "PHP")))
 
 ;; Define specific subcommands in this menu.
-(define-key pi-php-mode-map [menu-bar php complete-function]
+(define-key php-mode-map [menu-bar php complete-function]
   '("Complete function name" . php-complete-function))
-(define-key pi-php-mode-map
+(define-key php-mode-map
   [menu-bar php browse-manual]
   '("Browse manual" . php-browse-manual))
-(define-key pi-php-mode-map
+(define-key php-mode-map
   [menu-bar php search-documentation]
   '("Search documentation" . php-search-documentation))
 
@@ -874,26 +861,26 @@ current `tags-file-name'."
   (browse-url php-manual-url))
 
 ;; Define shortcut
-(define-key pi-php-mode-map
+(define-key php-mode-map
   "\C-c\C-f"
   'php-search-documentation)
 
 ;; Define shortcut
-(define-key pi-php-mode-map
+(define-key php-mode-map
   [(meta tab)]
   'php-complete-function)
 
 ;; Define shortcut
-(define-key pi-php-mode-map
+(define-key php-mode-map
   "\C-c\C-m"
   'php-browse-manual)
 
 ;; Define shortcut
-(define-key pi-php-mode-map
+(define-key php-mode-map
   '[(control .)]
   'php-show-arglist)
 
-(define-key pi-php-mode-map "<" 'php-maybe-here-document)
+(define-key php-mode-map "<" 'php-maybe-here-document)
 
 (defconst php-constants
   (eval-when-compile
@@ -1387,7 +1374,7 @@ Will be considered only if `php-highlight-function-call' is t.
     (let* ((keyword-regexp (concat "\\<\\("
                                    (regexp-opt function-keywords)
                                    "\\)(")))
-      (font-lock-add-keywords 'pi-php-mode
+      (font-lock-add-keywords 'php-mode
                               `((,keyword-regexp 1 ',face-name)))))
 
   (defun php-nth-list (list first count)
@@ -1476,6 +1463,139 @@ The elements of LIST are not copied, just the list structure itself."
      ))
   "Gauchy level highlighting for PHP mode.")
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; This code comes from
+;; http://www.oak.homeunix.org/~marcel/blog/2008/07/18/nested-imenu-for-php
+;;; Maintainer: Marcel Cary <marcel-cary of care2.com>
+;;; Keywords: php languages oop
+;;; Created: 2008-06-23
+;;; Modified: 2008-07-18
+;;; X-URL: http://www.oak.homeunix.org/~marcel/blog/articles/2008/07/14/nested-imenu-for-php
+;;;
+;;; Copyright (C) 2008 Marcel Cary
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Alas, speedbar shows menu items in reverse, but only below the top level.
+;;; Provide a way to fix it. See sample configuration in file comment.
+  (defvar php-imenu-alist-postprocessor (function identity))
+
+;;; Want to see properties or defines?  Add an entry for them here.
+  (defvar php-imenu-patterns nil)
+  (setq php-imenu-patterns
+        (list
+         ;; types: classes and interfaces
+         (list
+          ;; for some reason [:space:] and \s- aren't matching \n
+          (concat "^\\s-*"
+                  "\\(\\(abstract[[:space:]\n]+\\)?class\\|interface\\)"
+                  "[[:space:]\n]+"
+                  "\\([a-zA-Z0-9_]+\\)[[:space:]\n]*" ; class/iface name
+                  "\\([a-zA-Z0-9_[:space:]\n]*\\)" ; extends / implements clauses
+                  "[{]")
+          (lambda ()
+            (message "%S %S"
+                     (match-string-no-properties 3)
+                     (match-string-no-properties 1))
+            (concat (match-string-no-properties 3)
+                    " - "
+                    (match-string-no-properties 1)))
+          (lambda ()
+            (save-excursion
+              (backward-up-list 1)
+              (forward-sexp)
+              (point))))
+         ;; functions
+         (list
+          (concat "^[[:space:]\n]*"
+                  "\\(\\(public\\|protected\\|private\\|"
+                  "static\\|abstract\\)[[:space:]\n]+\\)*"
+                  "function[[:space:]\n]*&?[[:space:]\n]*"
+                  "\\([a-zA-Z0-9_]+\\)[[:space:]\n]*" ; function name
+                  "[(]")
+          (lambda ()
+            (concat (match-string-no-properties 3) "()"))
+          (lambda ()
+            (save-excursion
+              (backward-up-list 1)
+              (forward-sexp)
+              (when (not (looking-at "\\s-*;"))
+                (forward-sexp))
+              (point))))
+         ))
+
+;;; Global variable to pass to imenu-progress-message in multiple functions
+  (defvar php-imenu-prev-pos nil)
+
+;;; An implementation of imenu-create-index-function
+  (defun php-imenu-create-index ()
+    (let (prev-pos)
+      (imenu-progress-message php-imenu-prev-pos 0)
+      (let ((result (php-imenu-create-index-helper (point-min) (point-max) nil)))
+                                        ;(message "bye %S" result)
+        (imenu-progress-message php-imenu-prev-pos 100)
+        result)))
+
+  (defun php-imenu-create-index-helper (min max name)
+    (let ((combined-pattern
+           (concat "\\("
+                   (mapconcat
+                    (function (lambda (pat) (first pat)))
+                    php-imenu-patterns "\\)\\|\\(")
+                   "\\)"))
+          (index-alist '()))
+      (goto-char min)
+      (save-match-data
+        (while (re-search-forward combined-pattern max t)
+          (let ((pos (set-marker (make-marker) (match-beginning 0)))
+                (min (match-end 0))
+                (pat (save-excursion
+                       (goto-char (match-beginning 0))
+                       (find-if (function
+                                 (lambda (pat) (looking-at (first pat))))
+                                php-imenu-patterns))))
+            (when (not pat)
+              (message "php-imenu: How can no pattern get us here! %S" pos))
+            (when (and pat
+                       (not (php-imenu-in-string-p))
+                       )
+              (let* ((name (funcall (second pat)))
+                     (max  (funcall (third pat)))
+                     (children (php-imenu-create-index-helper min max name)))
+                ;; should validate max: what happens if unmatched curly?
+                                        ;(message "%S %S %S" nm name (mapcar (function first) children))
+                (if (equal '() children)
+                    (push (cons name pos) index-alist)
+                  (push (cons name
+                              (funcall php-imenu-alist-postprocessor
+                                       (cons (cons "*go*" pos)
+                                             children)))
+                        index-alist))
+                ))
+            (imenu-progress-message php-imenu-prev-pos nil)
+            )))
+      (reverse index-alist)))
+
+;;; Recognize when in quoted strings or heredoc-style string literals
+  (defun php-imenu-in-string-p ()
+    (save-match-data
+      (or (in-string-p)
+          (let ((pt (point)))
+            (save-excursion
+              (and (re-search-backward "<<<\\([A-Za-z0-9_]+\\)$" nil t)
+                   (not (re-search-forward (concat "^"
+                                                   (match-string-no-properties 1)
+                                                   ";$")
+                                           pt t))))))))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(when (not (featurep 'nxhtml-mode))
+  (add-hook 'php-mode-hook 'php-imenu-setup)
+  (defun php-imenu-setup ()
+    (setq imenu-create-index-function (function php-imenu-create-index))
+    ;; uncomment if you prefer speedbar:
+    ;;(setq php-imenu-alist-postprocessor (function reverse))
+    (imenu-add-menubar-index)
+    )
+  )
+
 (provide 'pi-php-mode)
 
-;;; pi-php-mode.el ends here
+;;; php-mode.el ends here
