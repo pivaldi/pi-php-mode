@@ -86,8 +86,8 @@
 ;;   $foo->$bar. (Default is nil.)
 ;; * `php-mode-dot-property-warning', which, if non-nil, warns on
 ;;   $foo.bar. (Default is nil.)
-;; * `php-mode-warn-on-unmatches', which, if non-nil, warns on
-;;   "everything else". (Default is nil.)
+;; * `php-mode-warn-on-unmatched', which, if non-nil, warns on
+;;   "everything else". (Default is t.)
 ;; * `php-mode-warn-if-mumamo-off', which, if nil, suppresses the
 ;;   once-per-file warning about indenting with mumamo-mode turned
 ;;   off. (Default is t)
@@ -250,7 +250,7 @@ as an unquoted string), but it's more likely you meant $foo->bar."
   :type 'boolean
   :group 'php)
 
-(defcustom php-mode-warn-on-unmatched nil
+(defcustom php-mode-warn-on-unmatched t
   "If non-`nil', use `font-lock-warning-face' on any expression
 that isn't matched by the other font lock regular expressions."
   :type 'boolean
