@@ -1,4 +1,4 @@
-;;; php-mode.el --- major mode for editing PHP code
+;;; pi-php-mode.el --- major mode for editing PHP code
 
 ;; Copyright (C) 1999, 2000, 2001, 2003, 2004 Turadg Aleahmad
 ;;               2008 Aaron S. Hawley
@@ -1530,7 +1530,7 @@ The elements of LIST are not copied, just the list structure itself."
     (let (prev-pos)
       (imenu-progress-message php-imenu-prev-pos 0)
       (let ((result (php-imenu-create-index-helper (point-min) (point-max) nil)))
-                                        ;(message "bye %S" result)
+                                        ;; (message "bye %S" result)
         (imenu-progress-message php-imenu-prev-pos 100)
         result)))
 
