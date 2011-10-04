@@ -1319,10 +1319,13 @@ current `tags-file-name'."
 
     ;; class declaration
     '("\\<\\(class\\|interface\\)\\s-+\\(\\sw+\\)?"
-      (1 font-lock-keyword-face) (2 font-lock-type-face nil t))
-    ;; handle several words specially, to include following word,
-    ;; thereby excluding it from unknown-symbol checks later
-    ;; FIX to handle implementing multiple
+      (1 font-lock-keyword-face) (2 font-lock-type-face nil t)
+      ((lambda (limit)
+         (re-search-forward
+          "\\(?:\\(\\s-+\\|,\\)\\s-*\\(\\(\\sw\\|\\\\\\)+\\)\\)"
+          (or (save-excursion (re-search-forward ";" limit t)) limit)
+          t))
+       nil nil (2 font-lock-type-face)))
     ;; currently breaks on "class Foo implements Bar, Baz"
     '("\\<\\(namespace\\|new\\|clone\\|extends\\|implements\\)\\s-+\\$?\\(\\(\\sw\\|\\\\\\)+\\)"
       (1 font-lock-keyword-face) (2 font-lock-type-face))
