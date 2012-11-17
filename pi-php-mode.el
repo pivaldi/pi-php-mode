@@ -37,7 +37,7 @@
 ;; Put this file in your Emacs lisp path (eg. site-lisp) and add to
 ;; your .emacs file:
 ;;
-;;   (require 'php-mode)
+;;   (require 'pi-php-mode)
 
 ;; To use abbrev-mode, add lines like this:
 ;;   (add-hook 'php-mode-hook
@@ -383,11 +383,29 @@ example `html-mode'.  Known such libraries are:\n\t"
           (php-check-html-for-indentation))
       (funcall 'c-indent-region start end quiet)))
 
+;; (defun php-cautious-indent-line ()
+;;   (if (or (not php-warn-if-mumamo-off)
+;;           php-warned-bad-indent
+;;           (php-check-html-for-indentation))
+;;       (funcall 'c-indent-line)))
+
 (defun php-cautious-indent-line ()
   (if (or (not php-warn-if-mumamo-off)
           php-warned-bad-indent
           (php-check-html-for-indentation))
-      (funcall 'c-indent-line)))
+      (let ((here (point))
+            doit)
+        (move-beginning-of-line nil)
+        ;; Don't indent heredoc end mark
+        (save-match-data
+          ;; TODO improve this ugly test to see if point is in here-doc block
+          (if (looking-at "[ \t]*[a-zA-Z0-9_]+;\n")
+              (progn
+                (goto-char here)
+                (indent-line-to 0))
+            (progn
+              (goto-char here)
+                (funcall 'c-indent-line)))))))
 
 (defconst php-tags '("<?php" "?>" "<?" "<?="))
 (defconst php-tags-key (regexp-opt php-tags))
@@ -401,7 +419,7 @@ example `html-mode'.  Known such libraries are:\n\t"
 (defconst php-block-stmt-2-key
   (regexp-opt php-block-stmt-2-kwds))
 
-(defconst php-class-decl-kwds '("class" "interface"))
+(defconst php-class-decl-kwds '("class" "interface" "trait"))
 
 (defconst php-class-key
   (concat
@@ -502,6 +520,10 @@ This is was done due to the problem reported here:
     ;; match until the search bound.
     "\\(?:\\(?:.*[^\\\n]\\)?\\(?:\\\\\\\\\\)*\\\\\n\\)*.*")
 
+  ;; (defconst php-here-doc-open-re
+  ;;   (concat "<<<\\s-*\\\\?\\(\\(?:['\"]EOF+['\"]\\|EOF\\)+\\)"
+  ;;           php-escaped-line-re "\\(\n\\)"))
+
   (defconst php-here-doc-open-re
     (concat "<<<\\s-*\\\\?\\(\\(?:['\"][^'\"]+['\"]\\|\\sw\\)+\\)"
             php-escaped-line-re "\\(\n\\)"))
@@ -567,6 +589,7 @@ Point is at the beginning of the next line."
 If non-nil INDENTED indicates that the EOF was indented."
     (let* ((eof-re (if eof (regexp-quote eof) ""))
            ;; A rough regexp that should find the opening <<<EOF back.
+           ;; (sre (concat php-here-doc-open-re
            (sre (concat "<<<\\(-?\\)\\s-*['\"\\]?"
                         ;; Use \s| to cheaply check it's an open-heredoc.
                         eof-re "['\"]?\\([ \t|;&)<>]"
@@ -887,7 +910,7 @@ current `tags-file-name'."
     (regexp-opt
      '(;; core constants
        "__LINE__" "__FILE__" "__DIR__"
-       "__FUNCTION__" "__CLASS__" "__METHOD__"
+       "__FUNCTION__" "__CLASS__" "__METHOD__" "__NAMESPACE__"
        "PHP_OS" "PHP_VERSION"
        "TRUE" "FALSE" "NULL"
        "E_ERROR" "E_NOTICE" "E_PARSE" "E_WARNING" "E_ALL" "E_STRICT"
@@ -1318,7 +1341,7 @@ current `tags-file-name'."
    (list
 
     ;; class declaration
-    '("\\<\\(class\\|interface\\)\\s-+\\(\\sw+\\)?"
+    '("\\<\\(class\\|interface\\|trait\\)\\s-+\\(\\sw+\\)?"
       (1 font-lock-keyword-face) (2 font-lock-type-face nil t)
       ((lambda (limit)
          (re-search-forward
@@ -1489,7 +1512,7 @@ The elements of LIST are not copied, just the list structure itself."
          (list
           ;; for some reason [:space:] and \s- aren't matching \n
           (concat "^\\s-*"
-                  "\\(\\(abstract[[:space:]\n]+\\)?class\\|interface\\)"
+                  "\\(\\(abstract[[:space:]\n]+\\)?class\\|interface\\|trait\\)"
                   "[[:space:]\n]+"
                   "\\([a-zA-Z0-9_]+\\)[[:space:]\n]*" ; class/iface name
                   "\\([a-zA-Z0-9_[:space:]\n]*\\)" ; extends / implements clauses
@@ -1584,6 +1607,7 @@ The elements of LIST are not copied, just the list structure itself."
           (let ((pt (point)))
             (save-excursion
               (and (re-search-backward "<<<\\([A-Za-z0-9_]+\\)$" nil t)
+                   ;; (and (re-search-backward "<<<\\(EOF\\)$" nil t)
                    (not (re-search-forward (concat "^"
                                                    (match-string-no-properties 1)
                                                    ";$")
