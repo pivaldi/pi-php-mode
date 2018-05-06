@@ -93,7 +93,6 @@ array_unshift
 array_values
 array_walk_recursive
 array_walk
-array
 arsort
 ascii2ebcdic
 asin
@@ -2302,7 +2301,6 @@ libxml_set_streams_context
 libxml_use_internal_errors
 link
 linkinfo
-list
 locale_get_default
 locale_set_default
 localeconv
