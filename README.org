@@ -1,1 +1,3 @@
-The documentation is [[http://git.piprime.fr/?p=emacs/pi-php-mode.git;a=summary][here]]
+*This code is obsolete.*
+
+Please use [[https://github.com/ejmr/php-mode][This package instead]].
